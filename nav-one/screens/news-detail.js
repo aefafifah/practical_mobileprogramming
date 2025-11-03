@@ -3,7 +3,6 @@ import { Header } from "../components";
 
 const NewsDetail = ({ route }) => {
   const params = route.params.item;
-
   return (
     <>
       <Header title="News" withBack={true} />
