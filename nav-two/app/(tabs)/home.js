@@ -1,99 +1,127 @@
-import { Heading, FlatList, Box, Text, Image } from "@gluestack-ui/themed";
-import { Header } from "../../components";
-import { ScrollView } from "react-native";
-import datas from "../../datas";
-import { Link } from "expo-router";
-import { TouchableOpacity } from "react-native";
+import {
+    Box,
+    Heading,
+    Center,
+    Spinner,
+    Divider,
+} from "@gluestack-ui/themed";
+import { useEffect, useState } from "react";
+import { FlatList } from "react-native";
+import { Categories, Header, NewsItem } from "../../components";
 
 const Home = () => {
-  const renderitem = ({ item }) => {
-    return (
-      <Link
-        href={{
-          pathname: "/news-detail",
-          params: item,
-        }}
-        asChild
-      >
-        <TouchableOpacity activeOpacity={0.5}>
-          <Box
-            p={"$4"}
-            borderBottomColor={"$coolGray300"}
-            borderBottomWidth={1}
-            flexDirection="row"
-            flex={1}
-          >
-            <Box flex={1} mr={"$4"}>
-              <Image
-                source={{ uri: item.image }}
-                w="$full"
-                h="$full"
-                alt="Image Data"
-              />
-            </Box>
-            <Box flex={1.8}>
-              <Text fontSize={"$sm"}>{item.date}</Text>
-              <Heading lineHeight={"$md"} fontSize={"$md"}>
-                {item.title}
-              </Heading>
-            </Box>
-          </Box>
-        </TouchableOpacity>
-      </Link>
-    );
-  };
+    const [isLoadingNews, setIsLoadingNews] = useState(true);
+    const [isFetching, setIsFetching] = useState(false);
+    const [news, setNews] = useState([]);
+    const [activeCategoryNews, setActiveCategoryNews] = useState("indonesia");
 
-  return (
-    <>
-      <Header title={"News"} />
-      <Box py={"$4"} bg="$red700">
-        <ScrollView horizontal={true} showsHorizontalScrollIndicator={false}>
-          {datas.slice(14).map((item, index) => {
-            return (
-              <Link
-                href={{
-                  pathname: "/news-detail",
-                  params: item,
-                }}
-                key={index}
-                asChild
-              >
-                <TouchableOpacity activeOpacity={0.5}>
-                  <Box w={"$48"} mr={"$4"} ml={index == 0 ? "$4" : "0"}>
-                    <Image
-                      source={{ uri: item.image }}
-                      w="$full"
-                      alt="Image Data"
-                      mb={"$2"}
-                    />
-                    <Text fontSize={"$xs"} color="$textLight300">
-                      {item.date}
-                    </Text>
-                    <Heading
-                      fontSize={"$sm"}
-                      lineHeight={"$xs"}
-                      ellipsizeMode="tail"
-                      numberOfLines={2}
-                      color="$textLight50"
-                    >
-                      {item.title}
-                    </Heading>
-                  </Box>
-                </TouchableOpacity>
-              </Link>
-            );
-          })}
-        </ScrollView>
-      </Box>
-      <FlatList
-        data={datas}
-        renderItem={renderitem}
-        keyExtractor={(item) => item.id}
-        showsVerticalScrollIndicator={false}
-      />
-    </>
-  );
+    
+    const getNews = (categoryName) => {
+        setIsLoadingNews(true);
+
+        const url = `https://jakpost.vercel.app/api/category/${categoryName}`;
+
+        console.log("Fetching news from:", url);
+
+        fetch(url)
+            .then((response) => {
+                console.log("News API status:", response.status);
+                console.log("News API content-type:", response.headers.get("content-type"));
+                return response.text();
+            })
+            .then((text) => {
+                console.log("News API response (first 500 chars):", text.substring(0, 500));
+                const json = JSON.parse(text);
+
+                if (json.status === 200 && json.posts && json.posts.length > 0) {
+                    const mappedNews = json.posts.map((article, index) => {
+                        let originalLink = article.link;
+
+                        if (article.link && article.link.includes('jakpost.vercel.app/api/detailpost')) {
+                            
+                            const pathMatch = article.link.match(/\/api\/detailpost\/(.+)/);
+                            if (pathMatch && pathMatch[1]) {
+                                
+                                originalLink = `https://www.thejakartapost.com/${pathMatch[1]}`;
+                            }
+                        }
+
+                        return {
+                            key: article.link || index.toString(),
+                            title: article.title,
+                            link: originalLink, 
+                            description: article.headline || "No description available",
+                            pubDate: article.pusblised_at || article.published_at || new Date().toISOString(),
+                            thumbnail: article.image,
+                            source: article.category || "Jakarta Post"
+                        };
+                    });
+
+                    console.log(`Mapped ${mappedNews.length} news items`);
+                    setNews(mappedNews);
+                } else {
+                    console.log("No articles found");
+                    setNews([]);
+                }
+            })
+            .catch((error) => {
+                console.error("News fetch error:", error);
+                console.error("Error details:", error.message);
+                setNews([]);
+            })
+            .finally(() => {
+                setIsLoadingNews(false);
+                setIsFetching(false);
+            });
+    };
+    
+
+    const categoriesHandler = (categoryName) => {
+        setActiveCategoryNews(categoryName);
+        getNews(categoryName);
+    };
+
+    useEffect(() => {
+        getNews(activeCategoryNews);
+    }, []);
+
+    const onRefresh = () => {
+        setIsFetching(true);
+        getNews(activeCategoryNews);
+    };
+
+    const renderitem = ({ item }) => {
+        return <NewsItem item={item} />;
+    };
+
+    return (
+        <>
+            <Header title={"News"} />
+            <Box py={"$4"} bg={"$red700"}>
+                <Heading ml={"$4"} lineHeight={"$lg"} mb={"$4"} color="$white">
+                    Jakarta Post - Indonesia News
+                </Heading>
+                <Categories onChange={categoriesHandler} />
+            </Box>
+            <Divider />
+            {isLoadingNews ? (
+                <Center flex={1}>
+                    <Spinner size={"large"} color={"$black"} />
+                </Center>
+            ) : (
+                <FlatList
+                    data={news}
+                    renderItem={renderitem}
+                    keyExtractor={(item) => item.key}
+                    showsVerticalScrollIndicator={false}
+                    refreshing={isFetching}
+                    onRefresh={onRefresh}
+                />
+            )}
+        </>
+    );
 };
 
 export default Home;
+
 
