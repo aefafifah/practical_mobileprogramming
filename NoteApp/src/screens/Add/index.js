@@ -7,7 +7,7 @@ import {
   Modal, 
   ModalBackdrop, 
   ModalBody, 
-  FormControlLabel, 
+   FormControlLabel, 
   Text, 
   InputField, 
   Input as GlueInput, 
@@ -22,71 +22,84 @@ import {
   Center, 
   ScrollView, 
 } from "@gluestack-ui/themed"; 
-import { Alert as RNAlert } from "react-native"; 
 import { Button, Input, Pilihan } from "../../components"; 
-import { useNotes } from "../../context/NotesContext"; 
+import { addNote, getNote } from "../../actions/AuthAction"; 
  
 const Add = ({ navigation }) => { 
-  const { categories, addNote, addCategory } = useNotes(); 
-  const [isModalVisible, setIsModalVisible] = useState(false); 
   const [title, setTitle] = useState(""); 
   const [content, setContent] = useState(""); 
   const [status, setStatus] = useState(""); 
   const [category, setCategory] = useState(""); 
+  const [categoryUser, setCategoryUser] = useState([]); 
+  const [isModalVisible, setIsModalVisible] = useState(false); 
   const [newCategory, setNewCategory] = useState(""); 
+  const [showAlert, setShowAlert] = useState(false); 
+  const [alertMessage, setAlertMessage] = useState(""); 
  
   const toggleModal = () => { 
     setIsModalVisible(!isModalVisible); 
   }; 
  
-  const handleAddCategory = () => { 
-    if (newCategory.trim()) { 
-      addCategory(newCategory); 
-      setNewCategory(""); 
-      toggleModal(); 
-      RNAlert.alert("Success", "Category added successfully!"); 
+  const toggleAlert = (message) => { 
+    setShowAlert(!showAlert); 
+    setAlertMessage(message); 
+  }; 
+ 
+  const ubahStatus = (status) => { 
+    setStatus(status); 
+  }; 
+ 
+  useEffect(() => { 
+    const fetchData = async () => { 
+      const notes = await getNote(); 
+      const categories = notes.map((note) => note.category); 
+      const uniqueCategories = categories.filter((value, index, self) => { 
+        return self.indexOf(value) === index; 
+      }); 
+      setCategoryUser(uniqueCategories); 
+    }; 
+ 
+    const unsubscribe = navigation.addListener("focus", fetchData); 
+ 
+    return () => { 
+      unsubscribe(); 
+      }; 
+  }, [navigation]); 
+ 
+  const onAddNote = async () => { 
+    if (title && content && status && category) { 
+      const data = { 
+        title: title, 
+        content: content, 
+        status: status, 
+        category: category, 
+      }; 
+ 
+      console.log(data); 
+      try { 
+        const user = await addNote(data); 
+        navigation.replace("MainApp"); 
+      } catch (error) { 
+        console.log("Error", error.message); 
+        toggleAlert(error.message); 
+      } 
     } else { 
-      RNAlert.alert("Error", "Please enter a category name"); 
+      console.log("Error", "Data tidak lengkap"); 
+      toggleAlert("Data tidak lengkap"); 
     } 
   }; 
  
-  const handleSave = () => { 
-    if (!title.trim()) { 
-      RNAlert.alert("Error", "Please enter a title"); 
-      return; 
+  const handleAddCategory = () => { 
+    if (newCategory.trim() !== "") { 
+      setCategoryUser((prevCategories) => [...prevCategories, newCategory]); 
+      setNewCategory(""); 
+      setIsModalVisible(false); 
     } 
-    if (!content.trim()) { 
-      RNAlert.alert("Error", "Please enter content"); 
-      return; 
-    } 
-    if (!status) { 
-      RNAlert.alert("Error", "Please select a status"); 
-      return; 
-    } 
-    if (!category) { 
-      RNAlert.alert("Error", "Please select a category"); 
-      return; 
-    } 
- 
-    // Save note to context 
-    addNote({ title, content, status, category }); 
-    console.log({ title, content, status, category }); 
-    
-    // Reset form 
-    setTitle(""); 
-    setContent(""); 
-    setStatus(""); 
-    setCategory(""); 
-    
-    // Navigate back to home 
-    navigation.navigate("Home"); 
-    
-    RNAlert.alert("Success", "Task saved successfully!"); 
   }; 
  
   return ( 
     <ScrollView> 
-      <Box flex={1} backgroundColor="$white" pb={"$24"}> 
+      <Box flex={1} backgroundColor="$white"> 
         <Box shadowColor="$black" shadowOffset={{ width: 0, height: 2 }} 
 shadowOpacity={"$25"} shadowRadius={"$3.5"} elevation={"$5"} 
 backgroundColor="$white" borderRadius={"$md"} mt={"$8"} mx={"$3"} px={"$3"} 
@@ -99,17 +112,25 @@ pt={"$2"}>
           </Text> 
           <FormControl> 
             <Input label={"Title"} width={"$full"} height={"$10"} 
-onChangeText={(value) => setTitle(value)} /> 
+onChangeText={(title) => setTitle(title)} /> 
             <Input textarea={true} label="Content" width={"$full"} 
-height={"$32"} onChangeText={(value) => setContent(value)} /> 
-            <Pilihan label="Status" datas={["Active", "Inactive"]} 
-selectedValue={status} onValueChange={(value) => setStatus(value)} /> 
-            <Pilihan label="Category" datas={categories} 
-selectedValue={category} onValueChange={(value) => setCategory(value)} /> 
+height={"$32"} onChangeText={(content) => setContent(content)} /> 
+            <Pilihan label="Status" selectedValue={status} 
+onValueChange={(status) => ubahStatus(status)} /> 
+            <Pilihan label="Category" selectedValue={category} 
+datas={categoryUser} onValueChange={(selectedCategory) => 
+setCategory(selectedCategory)} /> 
             <Button type="text" title="Add New Category" 
-onPress={toggleModal} padding={10} /> 
-            <Button type="text" title="Save" padding={10} 
-onPress={handleSave} /> 
+onPress={toggleModal} 
+            padding={10} /> 
+            <Button 
+              type="text" 
+              title="Save" 
+              padding={10} 
+              onPress={() => { 
+                onAddNote(); 
+              }} 
+            /> 
           </FormControl> 
         </Box> 
  
@@ -127,7 +148,7 @@ categories too!</Text>
             <ModalBody> 
               <GlueInput> 
                 <InputField role="form" placeholder="Category Name" 
-value={newCategory} onChangeText={(value) => setNewCategory(value)} /> 
+value={newCategory} onChangeText={(text) => setNewCategory(text)} /> 
               </GlueInput> 
             </ModalBody> 
             <ModalFooter> 
@@ -138,7 +159,7 @@ justifyContent="space-evenly">
                   p={"$2"} 
                   borderRadius={"$sm"} 
                   alignItems="center" 
-                  onPress={handleAddCategory} 
+                  onPress={handleAddCategory} // Trigger category addition 
                 > 
                   <Text color="$white" fontWeight="$bold"> 
                     Add 
@@ -158,12 +179,23 @@ justifyContent="space-evenly">
                   </Text> 
                 </Pressable> 
               </Box> 
-            </ModalFooter> 
+              </ModalFooter> 
           </ModalContent> 
         </Modal> 
+ 
+        {/* show Alert */} 
+        {showAlert && ( 
+          <Modal isOpen={showAlert} onClose={toggleAlert}> 
+            <ModalBackdrop /> 
+            <Alert mx="$4" action="error" variant="solid"> 
+              <AlertText fontWeight="$bold">Error!</AlertText> 
+              <AlertText>{alertMessage}</AlertText> 
+            </Alert> 
+          </Modal> 
+        )} 
       </Box> 
     </ScrollView> 
   ); 
 }; 
  
-export default Add; 
+export default Add;
