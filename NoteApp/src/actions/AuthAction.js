@@ -1,163 +1,122 @@
-import { Alert } from "react-native"; 
-import FIREBASE from "../config/FIREBASE"; 
-import { clearStorage, getData, storeData } from "../utils"; 
-export const registerUser = async (data, password) => { 
-try { 
-const success = await 
-FIREBASE.auth().createUserWithEmailAndPassword(data.email, password); 
- 
-    const dataBaru = { 
-      ...data, 
-      uid: success.user.uid, 
-    }; 
- 
-    await FIREBASE.database() 
-      .ref("users/" + success.user.uid) 
-      .set(dataBaru); 
-    //Local storage(Async Storage) 
-    storeData("user", dataBaru); 
-    return dataBaru; 
-  } catch (error) { 
-    throw error; 
-  } 
-}; 
- 
-export const loginUser = async (email, password) => { 
-  try { 
-    const success = await FIREBASE.auth().signInWithEmailAndPassword(email, 
-password); 
-    const resDB = await FIREBASE.database() 
-      .ref("/users/" + success.user.uid) 
-      .once("value"); 
- 
-    if (resDB.val()) { 
-      // Local storage (Async Storage) 
-      await storeData("user", resDB.val()); 
-      return resDB.val(); 
-    } else { 
-      throw new Error("User data not found"); 
-    } 
-  } catch (error) { 
-    throw error; 
-  } 
-}; 
- 
-export const logoutUser = () => { 
-  FIREBASE.auth() 
-    .signOut() 
-    .then(() => { 
-      // Sign-out successful. 
-      clearStorage(); 
-    }) 
-    .catch((error) => { 
-      // An error happened. 
-      alert(error); 
-    }); 
-}; 
- 
-export const addNote = async (data) => { 
-  try { 
-    // Ambil data yg sudah login dari fungsi 'getData' 
-    const userData = await getData("user"); 
- 
-    if (userData) { 
-      // Tambah note sesuai uid 
-      const dataBaru = { 
-        ...data, 
-        uid: userData.uid, 
-      }; 
- 
-      await FIREBASE.database() 
-        .ref("notes/" + userData.uid) 
-        .push(dataBaru); 
- 
-      console.log("Note added successfully"); 
-    } else { 
-      Alert.alert("Error", "Login Terlebih Dahulu"); 
-    } 
-  } catch (error) { 
-    throw error; 
-  } 
-}; 
- 
-export const getNote = async () => { 
-  const userData = await getData("user"); 
-  const notesRef = FIREBASE.database().ref("notes/" + userData.uid); 
- 
-  return notesRef 
-    .once("value") 
-    .then((snapshot) => { 
-      const notesData = snapshot.val(); 
-      if (notesData) { 
-        const notesArray = Object.entries(notesData).map(([noteId, noteData]) => 
-({ 
-          noteId, 
-          ...noteData, 
-        })); 
-        return notesArray; 
-      } else { 
-        return []; 
-      } 
-    }) 
-    .catch((error) => { 
-      console.error("Error fetching user notes:", error); 
-      return []; 
-    }); 
-}; 
- 
-export const editNote = async (noteId, updatedData) => { 
-  try { 
-    // Ambil data pengguna yang sudah login dari fungsi 'getData' 
-    const userData = await getData("user"); 
- 
-    if (userData) { 
-      // Perbarui catatan berdasarkan noteId 
-      const noteRef = 
-FIREBASE.database().ref(`notes/${userData.uid}/${noteId}`); 
-      const snapshot = await noteRef.once("value"); 
-      const existingNote = snapshot.val(); 
- 
-      if (existingNote) { 
-        const updatedNote = { 
-          ...existingNote, 
-          ...updatedData, 
-        }; 
- 
-        await noteRef.update(updatedNote); 
-        console.log("Note updated successfully"); 
-      } else { 
-        console.log("Note not found"); 
-      } 
-    } else { 
-      Alert.alert("Error", "Login Terlebih Dahulu"); 
-    } 
-  } catch (error) { 
-    throw error; 
-  } 
-}; 
- 
-export const deleteNote = async (noteId) => { 
-  try { 
-    const userData = await getData("user"); 
- 
-    if (!userData) { 
-      Alert.alert("Error", "Login Terlebih Dahulu"); 
-      return; 
-    } 
- 
-    const noteRef = FIREBASE.database().ref(`notes/${userData.uid}/${noteId}`); 
-    const snapshot = await noteRef.once("value"); 
-    const existingNote = snapshot.val(); 
- 
-    if (!existingNote) { 
-      console.log("Note not found"); 
-      return; 
-    } 
- 
-    // Hapus catatan dari database 
-    await noteRef.remove(); 
-    console.log("Note deleted successfully"); 
-  } catch (error) { 
-    throw error; 
-  } 
-}; 
+import { Alert } from "react-native";
+import FIREBASE from "../config/FIREBASE";
+import { clearStorage, getData, storeData } from "../utils";
+
+const db = FIREBASE.firestore();
+
+/* ================= REGISTER ================= */
+export const registerUser = async (data, password) => {
+  try {
+    const success = await FIREBASE.auth()
+      .createUserWithEmailAndPassword(data.email, password);
+
+    const dataBaru = {
+      ...data,
+      uid: success.user.uid,
+      createdAt: new Date(),
+    };
+
+    await db.collection("users")
+      .doc(success.user.uid)
+      .set(dataBaru);
+
+    await storeData("user", dataBaru);
+    return dataBaru;
+  } catch (error) {
+    throw error;
+  }
+};
+
+/* ================= LOGIN ================= */
+export const loginUser = async (email, password) => {
+  try {
+    const success = await FIREBASE.auth()
+      .signInWithEmailAndPassword(email, password);
+
+    const userDoc = await db
+      .collection("users")
+      .doc(success.user.uid)
+      .get();
+
+    if (userDoc.exists) {
+      await storeData("user", userDoc.data());
+      return userDoc.data();
+    } else {
+      throw new Error("User data not found");
+    }
+  } catch (error) {
+    throw error;
+  }
+};
+
+/* ================= LOGOUT ================= */
+export const logoutUser = async () => {
+  await FIREBASE.auth().signOut();
+  clearStorage();
+};
+
+/* ================= ADD NOTE ================= */
+export const addNote = async (data) => {
+  try {
+    const userData = await getData("user");
+
+    if (!userData) {
+      Alert.alert("Error", "Login Terlebih Dahulu");
+      return;
+    }
+
+    const dataBaru = {
+      ...data,
+      uid: userData.uid,
+      createdAt: new Date(),
+    };
+
+    await db.collection("notes").add(dataBaru);
+    console.log("Note added successfully");
+  } catch (error) {
+    throw error;
+  }
+};
+
+/* ================= GET NOTE ================= */
+export const getNote = async () => {
+  try {
+    const userData = await getData("user");
+    
+    // Remove the where clause since rules allow reading all notes
+    const snapshot = await db
+      .collection("notes")
+      .get();
+    
+    // Filter client-side instead
+    const allNotes = snapshot.docs.map(doc => ({
+      noteId: doc.id,
+      ...doc.data(),
+    }));
+    
+    return allNotes.filter(note => note.uid === userData.uid);
+  } catch (error) {
+    console.error("Error fetching notes:", error);
+    return [];
+  }
+};
+
+/* ================= EDIT NOTE ================= */
+export const editNote = async (noteId, updatedData) => {
+  try {
+    await db.collection("notes").doc(noteId).update(updatedData);
+    console.log("Note updated successfully");
+  } catch (error) {
+    throw error;
+  }
+};
+
+/* ================= DELETE NOTE ================= */
+export const deleteNote = async (noteId) => {
+  try {
+    await db.collection("notes").doc(noteId).delete();
+    console.log("Note deleted successfully");
+  } catch (error) {
+    throw error;
+  }
+};
